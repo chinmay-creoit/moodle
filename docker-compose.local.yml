@@ -1,0 +1,7 @@
+# Local-only override: publishes Moodle on the host. Not used by Dokploy (Traefik routes there).
+# Enabled via COMPOSE_FILE in your local .env (see .env.example), or explicitly:
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+services:
+  moodle:
+    ports:
+      - "${APACHE_PORT:-8080}:${APACHE_PORT:-8080}"

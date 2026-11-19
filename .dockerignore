@@ -1,0 +1,18 @@
+# Keep the build context small: .git alone is ~1 GB.
+.git
+.github
+**/node_modules
+
+# Never bake secrets or local tooling into the image.
+.env
+.env.*
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# Installed fresh inside the image by composer.
+/vendor
+
+.idea
+.vscode
+.DS_Store

@@ -1,0 +1,81 @@
+# Moodle 5.3 (MOODLE_503_STABLE): web + cron + PostgreSQL 17.
+#
+# Dokploy: create a "Compose" service from this repo/branch, set the variables from
+# .env.example in the Environment tab, then add a Domain pointing at service `moodle`,
+# container port 80 (HTTPS on). No host ports are published here on purpose - Traefik routes to it.
+#
+# Local (Colima/Docker): see .env.example; `docker compose up -d --build`.
+
+x-moodle-env: &moodle-env
+  MOODLE_URL: ${MOODLE_URL:?Set MOODLE_URL to the public URL, e.g. https://lms.example.com}
+  APACHE_PORT: ${APACHE_PORT:-80}
+  MOODLE_DB_HOST: db
+  MOODLE_DB_PORT: "5432"
+  MOODLE_DB_NAME: ${POSTGRES_DB:-moodle}
+  MOODLE_DB_USER: ${POSTGRES_USER:-moodle}
+  MOODLE_DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+
+x-moodle-build: &moodle-build
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: moodle-app:5.3
+  restart: unless-stopped
+  init: true
+  volumes:
+    - moodledata:/var/www/moodledata
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    command: ["postgres", "-c", "max_connections=200"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-moodle}
+      POSTGRES_USER: ${POSTGRES_USER:-moodle}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  moodle:
+    <<: *moodle-build
+    environment:
+      <<: *moodle-env
+      MOODLE_ADMIN_USER: ${MOODLE_ADMIN_USER:-admin}
+      MOODLE_ADMIN_PASSWORD: ${MOODLE_ADMIN_PASSWORD:?Set MOODLE_ADMIN_PASSWORD (used on first install)}
+      MOODLE_ADMIN_EMAIL: ${MOODLE_ADMIN_EMAIL:-admin@example.com}
+      MOODLE_SITE_FULLNAME: ${MOODLE_SITE_FULLNAME:-Moodle}
+      MOODLE_SITE_SHORTNAME: ${MOODLE_SITE_SHORTNAME:-Moodle}
+      MOODLE_LANG: ${MOODLE_LANG:-en}
+      MOODLE_AUTO_UPGRADE: ${MOODLE_AUTO_UPGRADE:-true}
+      APACHE_MAX_REQUEST_WORKERS: ${APACHE_MAX_REQUEST_WORKERS:-40}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # Any non-error response (a redirect to wwwroot counts) means Apache + PHP + DB are up.
+      test: ["CMD-SHELL", "curl -fsS -m 8 -o /dev/null http://localhost:$${APACHE_PORT:-80}/login/index.php || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 600s # first boot installs Moodle before Apache starts
+
+  cron:
+    <<: *moodle-build
+    command: ["moodle-cron"]
+    environment:
+      <<: *moodle-env
+    depends_on:
+      db:
+        condition: service_healthy
+      moodle:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  moodledata:
