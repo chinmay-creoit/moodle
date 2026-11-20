@@ -54,6 +54,12 @@ services:
       MOODLE_LANG: ${MOODLE_LANG:-en}
       MOODLE_AUTO_UPGRADE: ${MOODLE_AUTO_UPGRADE:-true}
       APACHE_MAX_REQUEST_WORKERS: ${APACHE_MAX_REQUEST_WORKERS:-40}
+    labels:
+      # Dokploy puts this container on TWO networks: the project's own (where `db` lives) and
+      # `dokploy-network` (where Traefik lives). Without this label Traefik picks one of the
+      # container's IPs at random each time it rebuilds its routes, and when it picks the
+      # project-network IP it can't reach it and returns 502 (Moodle itself stays healthy).
+      - traefik.docker.network=dokploy-network
     depends_on:
       db:
         condition: service_healthy
